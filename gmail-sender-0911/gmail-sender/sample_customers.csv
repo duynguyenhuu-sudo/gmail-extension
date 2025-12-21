@@ -1,0 +1,11 @@
+Company_Name,Customer_Name,Email,Customer_Domain
+株式会社ABC,田中太郎,tanaka@example.com,A
+XYZ製造株式会社,山田花子,yamada@example.com,M
+ヘルスケア株式会社,佐藤一郎,sato@example.com,H
+物流システム株式会社,鈴木次郎,suzuki@example.com,L
+ECサイト株式会社,高橋三郎,takahashi@example.com,E
+銀行システム株式会社,伊藤四郎,ito@example.com,B
+建設テック株式会社,渡辺五郎,watanabe@example.com,C
+ウェブ開発株式会社,小林六郎,kobayashi@example.com,W
+マルチドメイン株式会社,加藤七郎,kato@example.com,"A,M"
+IoT製造株式会社,吉田八郎,yoshida@example.com,"A,H"

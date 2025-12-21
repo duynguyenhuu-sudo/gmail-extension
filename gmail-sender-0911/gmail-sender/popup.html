@@ -2,546 +2,321 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>GITS Mailer</title>
+  <title>GITS Mailer Pro</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body { 
-      font-family: "Meiryo", "Hiragino Kaku Gothic ProN", "Yu Gothic", "MS PGothic", sans-serif;
-      width: 800px; 
-      padding: 0;
+      font-family: "Meiryo", "Hiragino Kaku Gothic ProN", sans-serif;
+      width: 900px; 
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #333;
-      line-height: 1.5;
+      color: #333; line-height: 1.5;
     }
-
-    .container {
-      background: white;
-      width: 800px; 
-      margin: 0;
-      padding: 20px;
-      border-radius: 0;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-    }
-
+    .container { background: white; padding: 20px; }
     h1 { 
-      font-size: 24px; 
-      margin: 0 0 20px; 
-      color: #2c3e50;
-      text-align: center;
-      font-weight: 700;
+      font-size: 22px; margin: 0 0 15px; text-align: center;
       background: linear-gradient(135deg, #667eea, #764ba2);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-
+    .tabs { display: flex; border-bottom: 2px solid #e8ecf4; margin-bottom: 15px; }
+    .tab { 
+      padding: 10px 20px; cursor: pointer; font-weight: 600; color: #7f8c8d;
+      border-bottom: 3px solid transparent; transition: all 0.3s;
+    }
+    .tab:hover { color: #667eea; }
+    .tab.active { color: #667eea; border-bottom-color: #667eea; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
     fieldset { 
-      border: 2px solid #e8ecf4; 
-      border-radius: 12px; 
-      padding: 20px; 
-      margin-bottom: 20px;
-      background: #fafbfc;
-      transition: all 0.3s ease;
+      border: 2px solid #e8ecf4; border-radius: 10px; 
+      padding: 15px; margin-bottom: 15px; background: #fafbfc;
     }
-
-    fieldset:hover {
-      border-color: #667eea;
-      box-shadow: 0 2px 10px rgba(102, 126, 234, 0.1);
-    }
-
+    fieldset:hover { border-color: #667eea; }
     legend { 
-      padding: 0 12px; 
-      font-weight: 600;
-      color: #2c3e50;
-      font-size: 14px;
-      background: white;
-      border-radius: 20px;
-      border: 2px solid #e8ecf4;
+      padding: 0 10px; font-weight: 600; color: #2c3e50; font-size: 13px;
+      background: white; border-radius: 15px; border: 2px solid #e8ecf4;
     }
-
-    label { 
-      display: block; 
-      margin: 12px 0 6px; 
-      font-weight: 600;
-      color: #34495e;
-      font-size: 13px;
+    label { display: block; margin: 8px 0 4px; font-weight: 600; color: #34495e; font-size: 12px; }
+    input[type="text"], input[type="number"], textarea, select { 
+      width: 100%; padding: 10px 12px; border: 2px solid #e8ecf4;
+      border-radius: 6px; font-size: 13px; transition: all 0.3s;
     }
-
-    input[type="text"], textarea { 
-      width: 100%; 
-      padding: 12px 16px;
-      border: 2px solid #e8ecf4;
-      border-radius: 8px;
-      font-size: 14px;
-      transition: all 0.3s ease;
-      background: white;
-    }
-
-    input[type="text"]:focus, textarea:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-
-    textarea { 
-      min-height: 180px; 
-      resize: vertical;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    }
-
-    /* Custom File Input Styling */
-    .file-input-wrapper {
-      position: relative;
-      display: inline-block;
-      width: 100%;
-      margin: 8px 0;
-    }
-
-    .file-input-wrapper input[type="file"] {
-      position: absolute;
-      opacity: 0;
-      width: 100%;
-      height: 100%;
-      cursor: pointer;
-    }
-
+    input:focus, textarea:focus, select:focus { outline: none; border-color: #667eea; }
+    textarea { min-height: 120px; resize: vertical; font-family: monospace; }
+    .file-input-wrapper { position: relative; margin: 6px 0; }
+    .file-input-wrapper input[type="file"] { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
     .file-input-label {
-      display: block;
-      padding: 12px 20px;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: white;
-      border-radius: 8px;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      font-weight: 500;
-      border: none;
+      display: block; padding: 10px 16px; background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white; border-radius: 6px; text-align: center; cursor: pointer; font-weight: 500; font-size: 12px;
     }
-
-    .file-input-label:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-    }
-
-    .file-input-label:active {
-      transform: translateY(0);
-    }
-
-    .file-input-label.multiple {
-      background: linear-gradient(135deg, #f093fb, #f5576c);
-    }
-
-    .file-input-label.multiple:hover {
-      box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
-    }
-
-    .row { 
-      display: flex; 
-      gap: 12px; 
-      align-items: center; 
-      margin: 12px 0;
-    }
-
-    .row > * { 
-      flex: 1; 
-    }
-
-    .divider {
-      display: flex;
-      align-items: center;
-      margin: 16px 0;
-      color: #7f8c8d;
-      font-size: 12px;
-    }
-
-    .divider::before,
-    .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: #e8ecf4;
-    }
-
-    .divider span {
-      padding: 0 12px;
-      background: #fafbfc;
-    }
-
+    .file-input-label:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); }
+    .file-input-label.attach { background: linear-gradient(135deg, #f093fb, #f5576c); }
+    .row { display: flex; gap: 10px; align-items: flex-start; }
+    .row > * { flex: 1; }
     button { 
-      padding: 12px 20px;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      font-size: 14px;
+      padding: 10px 18px; border: none; border-radius: 6px;
+      font-weight: 600; cursor: pointer; font-size: 13px; transition: all 0.3s;
     }
-
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    }
-
-    button:active {
-      transform: translateY(0);
-    }
-
-    #btnAuth {
-      background: linear-gradient(135deg, #4facfe, #00f2fe);
-      color: white;
-      width: 100%;
-      margin-bottom: 12px;
-    }
-
-    #btnFetchUrl {
-      background: linear-gradient(135deg, #43e97b, #38f9d7);
-      color: white;
-      width: 100%;
-    }
-
-    #btnSend {
-      background: linear-gradient(135deg, #fa709a, #fee140);
-      color: white;
-      float: right;
-      min-width: 140px;
-    }
-
-    .small { 
-      font-size: 12px; 
-      color: #7f8c8d; 
-      line-height: 1.4;
-    }
-
-    .mono { 
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
-    }
-
+    button:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+    .btn-success { background: linear-gradient(135deg, #43e97b, #38f9d7); color: white; }
+    .btn-warning { background: linear-gradient(135deg, #fa709a, #fee140); color: white; }
+    .btn-info { background: linear-gradient(135deg, #4facfe, #00f2fe); color: white; }
+    .small { font-size: 11px; color: #7f8c8d; }
     .list { 
-      max-height: 140px; 
-      overflow: auto; 
-      border: 2px dashed #e8ecf4; 
-      padding: 12px; 
-      border-radius: 8px;
-      background: white;
-      font-size: 13px;
-      line-height: 1.4;
+      max-height: 100px; overflow: auto; border: 2px dashed #e8ecf4; 
+      padding: 10px; border-radius: 6px; background: white; font-size: 12px;
     }
-
-    .list::-webkit-scrollbar {
-      width: 6px;
+    .muted { color: #95a5a6; font-style: italic; }
+    .err { color: #e74c3c; background: #fdf2f2; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #e74c3c; margin: 6px 0; }
+    .ok { color: #27ae60; background: #f0f9f4; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #27ae60; margin: 6px 0; }
+    .warn { color: #f39c12; background: #fef9e7; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #f39c12; margin: 6px 0; }
+    .pill { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 2px 8px; border-radius: 12px; font-size: 10px; margin: 0 2px; display: inline-block; }
+    .info-box { background: linear-gradient(135deg, #e3f2fd, #f3e5f5); border: 1px solid #e1bee7; border-radius: 6px; padding: 10px; margin: 6px 0; font-size: 11px; color: #4a148c; }
+    .stats-box {
+      background: linear-gradient(135deg, #fff3e0, #ffe0b2); border: 1px solid #ffcc80;
+      border-radius: 6px; padding: 10px; margin: 6px 0; font-size: 12px; color: #e65100;
+      display: flex; justify-content: space-between; align-items: center;
     }
-
-    .list::-webkit-scrollbar-track {
-      background: #f1f1f1;
-      border-radius: 3px;
-    }
-
-    .list::-webkit-scrollbar-thumb {
-      background: #c1c1c1;
-      border-radius: 3px;
-    }
-
-    .list::-webkit-scrollbar-thumb:hover {
-      background: #a8a8a8;
-    }
-
-    .muted { 
-      color: #95a5a6; 
-      font-style: italic;
-    }
-
-    .err { 
-      color: #e74c3c; 
-      white-space: pre-wrap;
-      background: #fdf2f2;
-      padding: 8px 12px;
-      border-radius: 6px;
-      border-left: 4px solid #e74c3c;
-      margin: 8px 0;
-    }
-
-    .ok { 
-      color: #27ae60;
-      background: #f0f9f4;
-      padding: 8px 12px;
-      border-radius: 6px;
-      border-left: 4px solid #27ae60;
-      margin: 8px 0;
-    }
-
-    .pill { 
-      background: linear-gradient(135deg, #667eea, #764ba2); 
-      color: white; 
-      padding: 4px 10px; 
-      border-radius: 15px; 
-      font-size: 11px; 
-      margin: 0 3px;
-      font-weight: 500;
-      display: inline-block;
-    }
-
-    .info-box {
-      background: linear-gradient(135deg, #e3f2fd, #f3e5f5);
-      border: 1px solid #e1bee7;
-      border-radius: 8px;
-      padding: 12px;
-      margin: 8px 0;
-      font-size: 12px;
-      color: #4a148c;
-    }
-
-    .info-box::before {
-      content: "💡 ";
-      margin-right: 4px;
-    }
-
-    #attachInfo {
-      background: #f8f9fa;
-      padding: 8px 12px;
-      border-radius: 6px;
-      border: 1px solid #e9ecef;
-      margin-top: 8px;
-      font-size: 12px;
-      color: #6c757d;
-    }
-
-    #status, #log {
-      margin-top: 12px;
-      padding: 8px 0;
-    }
-
-    #log {
-      background: #f8f9fa;
-      border: 1px solid #e9ecef;
-      border-radius: 6px;
-      padding: 12px;
-      max-height: 200px;
-      overflow-y: auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 11px;
-      line-height: 1.4;
-      white-space: pre-wrap;
-    }
-
-    /* Attached Files Container */
-    .attached-files-container {
-      margin-top: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .attached-file-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: white;
-      border: 2px solid #e8ecf4;
-      border-radius: 8px;
-      padding: 12px 16px;
-      transition: all 0.3s ease;
-      animation: slideIn 0.3s ease-out;
-    }
-
-    .attached-file-item:hover {
-      border-color: #f093fb;
-      box-shadow: 0 2px 8px rgba(240, 147, 251, 0.2);
-    }
-
-    .file-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex: 1;
-    }
-
-    .file-icon {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, #f093fb, #f5576c);
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      color: white;
-      font-weight: 600;
-    }
-
-    .file-details {
-      flex: 1;
-    }
-
-    .file-name {
-      font-weight: 600;
-      color: #2c3e50;
-      font-size: 13px;
-      margin-bottom: 2px;
-    }
-
-    .file-size {
-      font-size: 11px;
-      color: #7f8c8d;
-    }
-
-    .remove-file-btn {
-      width: 28px;
-      height: 28px;
-      border: none;
-      background: #e74c3c;
-      color: white;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: bold;
-      transition: all 0.3s ease;
-      flex-shrink: 0;
-    }
-
-    .remove-file-btn:hover {
-      background: #c0392b;
-      transform: scale(1.1);
-    }
-
-    .remove-file-btn:active {
-      transform: scale(0.95);
-    }
-
-    /* Animation for loading states */
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.5; }
-      100% { opacity: 1; }
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(-10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes slideOut {
-      from {
-        opacity: 1;
-        transform: translateY(0);
-      }
-      to {
-        opacity: 0;
-        transform: translateY(-10px);
-      }
-    }
-
-    .loading {
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-
-    .removing {
-      animation: slideOut 0.3s ease-out forwards;
-    }
-
-    /* Responsive adjustments */
-    @media (max-width: 500px) {
-      body {
-        width: 100%;
-      }
-      
-      .container {
-        padding: 16px;
-      }
-      
-      .row {
-        flex-direction: column;
-        gap: 8px;
-      }
-      
-      .row > * {
-        width: 100%;
-      }
-    }
-  </style>
+    .stats-box .count { font-size: 18px; font-weight: bold; }
+</style>
 </head>
 <body>
   <div class="container">
-    <h1>GITS Mailer</h1>
-    <fieldset>
-      <legend>1) Customer Data</legend>
-
-      <label>Select Excel/CSV (with columns: 会社名, 名前, メール)</label>
-      <div class="file-input-wrapper">
-        <input id="fileExcel" type="file" accept=".xlsx,.xls,.csv" />
-        <label for="fileExcel" class="file-input-label">
-          📊 Choose Excel/CSV File
-        </label>
-      </div>
-
-      <div class="divider">
-        <span>or</span>
-      </div>
-
-      <label>Paste Google Sheet / Excel link (public)</label>
-      <input id="excelUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/... or direct Excel link" />
-      <button id="btnFetchUrl">🔗 Load data from link</button>
-      
-      <div class="info-box">
-        Supported: Google Sheets, Excel online, CSV. Must include 3 columns: Company, Name, Email
-      </div>
-
-      <div style="margin-top: 16px;">
-        <label>Data Preview:</label>
-        <div id="preview" class="list muted">No data yet.</div>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>2) Attachments (up to 3 files)</legend>
-      <div class="file-input-wrapper">
-        <input id="fileAttach" type="file" multiple />
-        <label for="fileAttach" class="file-input-label multiple">
-          📎 Choose attachments (max 3 files)
-        </label>
-      </div>
-      <div id="attachInfo" class="small muted">0 files selected.</div>
-      <div id="attachedFiles" class="attached-files-container"></div>
-    </fieldset>
-
-  <fieldset>
-    <legend>3) Email Content</legend>
-    <label>Subject</label>
-    <input id="subject" type="text" class="mono" value="【ITアウトソーシングご提案のご連絡】貴社の課題解決に貢献できるGITSのご紹介" />
-
-    <label>Body Template</label>
-    <textarea id="body" class="mono"></textarea>
-
-    <div class="small">Available placeholders: <span class="pill">{{会社名}}</span><span class="pill">{{名前}}</span>.<br/>
-      *The system will automatically add “様” after the name.</div>
-  </fieldset>
-
-  <fieldset>
-    <legend>4) Send</legend>
-    <div class="row">
-      <label>Email delay (ms)</label>
-      <input id="delay" type="text" value="1200" />
+    <h1>🚀 GITS Mailer Pro</h1>
+    
+    <!-- Daily Stats -->
+    <div class="stats-box">
+      <div>📧 Hôm nay: <span class="count" id="dailyCount">0</span>/100 | Queue: <span id="queueCount">0</span></div>
+      <div id="limitWarning" style="color: #c62828; display: none;">⚠️ Đạt giới hạn!</div>
     </div>
-    <button id="btnAuth">Sign in with Google / Grant Access</button>
-    <button id="btnSend" style="float:right;">Send All</button>
-    <div style="clear:both;"></div>
-    <div id="status" class="small"></div>
-    <div id="log" class="small"></div>
-  </fieldset>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" data-tab="import">1. Import Data</div>
+      <div class="tab" data-tab="preview">2. Preview</div>
+      <div class="tab" data-tab="send">3. Send</div>
+      <div class="tab" data-tab="logs">4. Logs</div>
+    </div>
+
+    <!-- Tab 1: Import Data -->
+    <div id="tab-import" class="tab-content active">
+      <fieldset>
+        <legend>📁 File 1: Company Insight (Danh sách KH)</legend>
+        <div class="info-box">
+          Cột: <span class="pill">Company_Name</span> <span class="pill">Customer_Name</span> 
+          <span class="pill">Email</span> <span class="pill">Customer_Domain</span><br>
+          Domain codes: A=App/IoT, M=Manufacturing, H=Healthcare, L=Logistic, E=E-commerce, B=Bank, C=Construction, W=Web
+        </div>
+        <div class="file-input-wrapper">
+          <input id="fileCustomer" type="file" accept=".xlsx,.xls,.csv" />
+          <label for="fileCustomer" class="file-input-label">📊 Chọn file Company Insight</label>
+        </div>
+        <div id="customerPreview" class="list muted" style="margin-top:8px;">Chưa có dữ liệu.</div>
+        <div id="customerValidation" class="small"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>📁 File 2: Domain Master</legend>
+        <div class="info-box">
+          Cột: <span class="pill">Domain</span> <span class="pill">Title_Mail</span> 
+          <span class="pill">CaseStudy_1</span>...<span class="pill">CaseStudy_X</span>
+        </div>
+        <div class="file-input-wrapper">
+          <input id="fileDomain" type="file" accept=".xlsx,.xls,.csv" />
+          <label for="fileDomain" class="file-input-label">📊 Chọn file Domain Master</label>
+        </div>
+        <div id="domainPreview" class="list muted" style="margin-top:8px;">Chưa có dữ liệu.</div>
+      </fieldset>
+
+      <fieldset>
+        <legend>📁 File 3: Mail Template</legend>
+        <div class="file-input-wrapper">
+          <input id="fileTemplate" type="file" accept=".txt,.html" />
+          <label for="fileTemplate" class="file-input-label">📄 Chọn file Template (tùy chọn)</label>
+        </div>
+        <label>Nội dung Template:</label>
+        <textarea id="bodyTemplate" placeholder="Email template..."></textarea>
+        <div class="small">
+          Placeholders: <span class="pill">{{Company_Name}}</span> <span class="pill">{{Customer_Name}}</span> 
+          <span class="pill">{{Title_Mail}}</span> <span class="pill">{{CaseStudy_List}}</span>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>📎 Attachments (Max 3 files, 25MB)</legend>
+        <div class="file-input-wrapper">
+          <input id="fileAttach" type="file" multiple />
+          <label for="fileAttach" class="file-input-label attach">📎 Chọn file đính kèm</label>
+        </div>
+        <div id="attachInfo" class="small muted">0 file.</div>
+        <div id="attachedFiles"></div>
+      </fieldset>
+
+      <button id="btnValidate" class="btn-primary" style="width:100%;">✅ Validate & Load Data</button>
+      <div id="validateStatus" class="small" style="margin-top:10px;"></div>
+    </div>
+
+    <!-- Tab 2: Preview -->
+    <div id="tab-preview" class="tab-content">
+      <fieldset>
+        <legend>👁️ Email Preview</legend>
+        <div class="row">
+          <div>
+            <label>Chọn khách hàng để preview:</label>
+            <select id="previewCustomer" style="margin-bottom:10px;">
+              <option value="">-- Chọn khách hàng --</option>
+            </select>
+          </div>
+          <div>
+            <label>Domain:</label>
+            <input type="text" id="previewDomain" readonly style="background:#f5f5f5;" />
+          </div>
+        </div>
+        
+        <div style="background:#f8f9fa; border-radius:8px; padding:15px; margin-top:10px;">
+          <label>📧 Subject:</label>
+          <div id="previewSubject" style="background:white; padding:10px; border-radius:4px; border:1px solid #ddd; margin-bottom:10px; font-weight:600;"></div>
+          
+          <label>📝 Body:</label>
+          <div id="previewBody" style="background:white; padding:15px; border-radius:4px; border:1px solid #ddd; white-space:pre-wrap; font-size:13px; max-height:300px; overflow-y:auto;"></div>
+        </div>
+
+        <div class="info-box" style="margin-top:10px;">
+          <strong>CaseStudy Logic:</strong><br>
+          • 1 Domain → 4 CaseStudy<br>
+          • 2+ Domains → 2 CaseStudy mỗi domain<br>
+          • Tự động thêm "など" cuối danh sách
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>📋 Danh sách khách hàng sẽ gửi</legend>
+        <div id="customerList" class="list" style="max-height:150px;"></div>
+        <div class="small" style="margin-top:5px;">
+          Tổng: <strong id="totalCustomers">0</strong> khách hàng
+        </div>
+      </fieldset>
+
+      <button id="btnConfirmPreview" class="btn-success" style="width:100%;">✅ Xác nhận & Chuyển sang Send</button>
+    </div>
+
+    <!-- Tab 3: Send -->
+    <div id="tab-send" class="tab-content">
+      <fieldset>
+        <legend>🔐 Authentication</legend>
+        <button id="btnAuth" class="btn-info" style="width:100%;">🔐 Đăng nhập Google</button>
+        <div id="authStatus" class="small" style="margin-top:5px;"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>⏱️ Email Delay Settings</legend>
+        <div class="row">
+          <div>
+            <label>Delay Mode:</label>
+            <select id="delayMode">
+              <option value="random">Random (khuyến nghị)</option>
+              <option value="fixed">Cố định</option>
+            </select>
+          </div>
+          <div id="randomDelayWrapper">
+            <label>Random từ (giây):</label>
+            <div class="row">
+              <input type="number" id="delayMin" value="15" min="5" />
+              <span style="padding:10px;">đến</span>
+              <input type="number" id="delayMax" value="45" min="10" />
+            </div>
+          </div>
+          <div id="fixedDelayWrapper" style="display:none;">
+            <label>Delay cố định (giây):</label>
+            <input type="number" id="fixedDelay" value="20" min="5" />
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>📤 Send Control</legend>
+        <div class="row">
+          <button id="btnAddToQueue" class="btn-primary">📥 Add to Queue</button>
+          <button id="btnStartWorker" class="btn-success">▶️ Start Sending</button>
+          <button id="btnStopWorker" class="btn-warning">⏹️ Stop</button>
+        </div>
+        <div id="sendStatus" class="small" style="margin-top:10px;"></div>
+        
+        <div style="margin-top:10px;">
+          <label>Progress:</label>
+          <div style="background:#e8ecf4; border-radius:4px; height:20px; overflow:hidden;">
+            <div id="progressBar" style="background:linear-gradient(135deg, #667eea, #764ba2); height:100%; width:0%; transition:width 0.3s;"></div>
+          </div>
+          <div class="small" style="margin-top:5px;">
+            <span id="progressText">0/0</span> | Next in: <span id="nextSendIn">--</span>s
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>📜 Live Log</legend>
+        <div id="liveLog" style="background:#1e1e1e; color:#0f0; padding:10px; border-radius:6px; font-family:monospace; font-size:11px; max-height:150px; overflow-y:auto;"></div>
+      </fieldset>
+    </div>
+
+    <!-- Tab 4: Logs -->
+    <div id="tab-logs" class="tab-content">
+      <fieldset>
+        <legend>📊 Send Logs</legend>
+        <div class="row" style="margin-bottom:10px;">
+          <div>
+            <label>Filter by Date:</label>
+            <input type="date" id="logDate" />
+          </div>
+          <div>
+            <label>Filter by Status:</label>
+            <select id="logStatus">
+              <option value="">All</option>
+              <option value="Success">Success</option>
+              <option value="Failed">Failed</option>
+              <option value="Pending">Pending</option>
+            </select>
+          </div>
+          <div style="padding-top:22px;">
+            <button id="btnFilterLogs" class="btn-info">🔍 Filter</button>
+          </div>
+        </div>
+
+        <div id="logSummary" class="stats-box">
+          <div>Total: <span id="logTotal">0</span></div>
+          <div>Success: <span id="logSuccess" style="color:#27ae60;">0</span></div>
+          <div>Failed: <span id="logFailed" style="color:#e74c3c;">0</span></div>
+        </div>
+
+        <div id="logTable" style="max-height:200px; overflow-y:auto; border:1px solid #e8ecf4; border-radius:6px;">
+          <table style="width:100%; border-collapse:collapse; font-size:11px;">
+            <thead style="background:#f5f5f5; position:sticky; top:0;">
+              <tr>
+                <th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;">Date</th>
+                <th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;">Company</th>
+                <th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;">Customer</th>
+                <th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;">Email</th>
+                <th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;">Status</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody"></tbody>
+          </table>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>📥 Export</legend>
+        <div class="row">
+          <button id="btnExportToday" class="btn-success">📥 Export Today</button>
+          <button id="btnExportFiltered" class="btn-primary">📥 Export Filtered</button>
+          <button id="btnClearOldLogs" class="btn-warning">🗑️ Clear Old Logs (>7 days)</button>
+        </div>
+      </fieldset>
+    </div>
+
+  </div>
 
   <script src="lib/xlsx.min.js"></script>
   <script src="popup.js" type="module"></script>
