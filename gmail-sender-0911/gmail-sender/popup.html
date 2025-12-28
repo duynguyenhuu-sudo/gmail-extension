@@ -133,14 +133,15 @@
       <fieldset>
         <legend>📁 File 3: Mail Template</legend>
         <div class="file-input-wrapper">
-          <input id="fileTemplate" type="file" accept=".txt,.html" />
-          <label for="fileTemplate" class="file-input-label">📄 Chọn file Template (tùy chọn)</label>
+          <input id="fileTemplate" type="file" accept=".txt,.html,.docx" />
+          <label for="fileTemplate" class="file-input-label">📄 Chọn file Template (Word/TXT)</label>
         </div>
         <label>Nội dung Template:</label>
         <textarea id="bodyTemplate" placeholder="Email template..."></textarea>
         <div class="small">
           Placeholders: <span class="pill">{{Company_Name}}</span> <span class="pill">{{Customer_Name}}</span> 
-          <span class="pill">{{Title_Mail}}</span> <span class="pill">{{CaseStudy_List}}</span>
+          <span class="pill">{{Title_Mail}}</span> <span class="pill">{{CaseStudy_List}}</span><br>
+          Hoặc: <span class="pill">{{CaseStudy_1}}</span> <span class="pill">{{CaseStudy_2}}</span> ... <span class="pill">{{READ_Casestudy_1}}</span>
         </div>
       </fieldset>
 
@@ -238,9 +239,15 @@
       <fieldset>
         <legend>📤 Send Control</legend>
         <div class="row">
-          <button id="btnAddToQueue" class="btn-primary">📥 Add to Queue</button>
-          <button id="btnStartWorker" class="btn-success">▶️ Start Sending</button>
+          <button id="btnSendNow" class="btn-success" style="flex:2;">📧 Send Now</button>
           <button id="btnStopWorker" class="btn-warning">⏹️ Stop</button>
+        </div>
+        <div class="small" style="margin-top:8px; color:#7f8c8d;">
+          Hoặc gửi theo queue (chạy nền):
+        </div>
+        <div class="row" style="margin-top:5px;">
+          <button id="btnAddToQueue" class="btn-info">📥 Add to Queue</button>
+          <button id="btnStartWorker" class="btn-primary">▶️ Start Queue</button>
         </div>
         <div id="sendStatus" class="small" style="margin-top:10px;"></div>
         
@@ -319,6 +326,7 @@
   </div>
 
   <script src="lib/xlsx.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="popup.js" type="module"></script>
 </body>
 </html>

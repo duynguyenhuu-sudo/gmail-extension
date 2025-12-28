@@ -4,31 +4,45 @@ import { buildRawEmail, cleanSignatureHtml } from './utils/mime.js';
 const CLIENT_ID = '385178155043-j6t92gukuvh47oihp3ml794h9rhuqkhg.apps.googleusercontent.com';
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
   'https://www.googleapis.com/auth/gmail.settings.basic'
 ];
 
-// ========== OAUTH ==========
-async function getAccessTokenSimple() {
+// ========== OAUTH (giữ nguyên code cũ) ==========
+async function getAccessTokenInteractive() {
+  const redirectUri = chrome.identity.getRedirectURL('oauth2');
+  const authUrl =
+    'https://accounts.google.com/o/oauth2/v2/auth' +
+    `?client_id=${encodeURIComponent(CLIENT_ID)}` +
+    `&response_type=token` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&scope=${encodeURIComponent(SCOPES.join(' '))}` +
+    `&prompt=consent&access_type=online&include_granted_scopes=true`;
+
   return new Promise((resolve, reject) => {
-    chrome.identity.getAuthToken({ interactive: true }, (token) => {
+    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async (redirectedTo) => {
       if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
-      if (!token) return reject(new Error('No token'));
-      resolve(token);
+      if (!redirectedTo) return reject(new Error('No redirect URL'));
+      try {
+        const hash = new URL(redirectedTo).hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get('access_token');
+        const expiresIn = parseInt(params.get('expires_in') || '0', 10);
+        if (params.get('error')) return reject(new Error(`OAuth error: ${params.get('error')}`));
+        if (!accessToken) return reject(new Error('No access token'));
+        const expiry = Date.now() + (expiresIn - 60) * 1000;
+        await chrome.storage.session.set({ accessToken, expiry });
+        resolve(accessToken);
+      } catch (e) { reject(e); }
     });
   });
 }
 
-async function getAccessTokenInteractive() {
-  const redirectUri = chrome.identity.getRedirectURL('oauth2');
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(CLIENT_ID)}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(SCOPES.join(' '))}&prompt=consent`;
-
+async function getAccessTokenSimple() {
   return new Promise((resolve, reject) => {
-    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, (redirectedTo) => {
+    chrome.identity.getAuthToken({ interactive: true }, (token) => {
       if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
-      if (!redirectedTo) return reject(new Error('No redirect'));
-      const hash = new URL(redirectedTo).hash.substring(1);
-      const token = new URLSearchParams(hash).get('access_token');
-      if (!token) return reject(new Error('No token'));
+      if (!token) return reject(new Error('No token received'));
       resolve(token);
     });
   });
@@ -37,19 +51,18 @@ async function getAccessTokenInteractive() {
 async function ensureToken() {
   const { accessToken, expiry } = await chrome.storage.session.get(['accessToken', 'expiry']);
   if (accessToken && expiry && Date.now() < expiry) return accessToken;
-  
   try {
     const token = await getAccessTokenSimple();
-    await chrome.storage.session.set({ accessToken: token, expiry: Date.now() + 3500000 });
+    const expiryTime = Date.now() + 3600 * 1000;
+    await chrome.storage.session.set({ accessToken: token, expiry: expiryTime });
     return token;
-  } catch {
-    const token = await getAccessTokenInteractive();
-    await chrome.storage.session.set({ accessToken: token, expiry: Date.now() + 3500000 });
-    return token;
+  } catch (e) {
+    console.warn('Simple OAuth failed, trying interactive...', e);
+    return getAccessTokenInteractive();
   }
 }
 
-// ========== GMAIL API ==========
+// ========== GMAIL API (giữ nguyên code cũ) ==========
 async function gmailSendRaw(raw) {
   const token = await ensureToken();
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -59,22 +72,25 @@ async function gmailSendRaw(raw) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(`Gmail error: ${res.status} - ${JSON.stringify(err)}`);
+    throw new Error(`Gmail send failed: ${res.status} ${res.statusText} — ${JSON.stringify(err)}`);
   }
   return res.json();
 }
 
-async function getSignature() {
+async function getDefaultSignature() {
   try {
     const token = await ensureToken();
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs', {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return '';
+    if (!res.ok) throw new Error(`Failed fetch sendAs: ${res.status}`);
     const data = await res.json();
-    const primary = data.sendAs?.find(s => s.isPrimary);
+    const primary = data.sendAs?.find(sa => sa.isPrimary);
     return cleanSignatureHtml(primary?.signature || '');
-  } catch { return ''; }
+  } catch (e) {
+    console.error("getDefaultSignature error:", e);
+    return '';
+  }
 }
 
 
@@ -93,22 +109,16 @@ function getDelay() {
 // ========== WORKER ==========
 async function startWorker(config) {
   if (workerRunning) return { ok: false, error: 'Worker already running' };
-  
   delayConfig = config || delayConfig;
   workerRunning = true;
-  
-  console.log('🚀 Worker started with config:', delayConfig);
+  console.log('🚀 Worker started');
   processNextJob();
-  
   return { ok: true };
 }
 
 function stopWorker() {
   workerRunning = false;
-  if (workerTimeout) {
-    clearTimeout(workerTimeout);
-    workerTimeout = null;
-  }
+  if (workerTimeout) { clearTimeout(workerTimeout); workerTimeout = null; }
   updateWorkerStatus({ isRunning: false });
   console.log('⏹️ Worker stopped');
   return { ok: true };
@@ -132,18 +142,27 @@ async function processNextJob() {
   const sent = jobQueue.filter(j => j.status === 'DONE').length;
   const failed = jobQueue.filter(j => j.status === 'FAILED').length;
 
-  console.log(`📧 Processing job ${job.id} for ${job.customer.Email}`);
-  updateWorkerStatus({ total, sent, failed, isRunning: true, nextSendIn: 0, lastLog: `📧 Sending to ${job.customer.Email}...` });
+  console.log(`📧 Processing: ${job.customer.Email}`);
+  await updateWorkerStatus({ total, sent, failed, isRunning: true, nextSendIn: 0, lastLog: `📧 Sending to ${job.customer.Email}...` });
 
   try {
-    // Get signature
-    const signature = await getSignature();
+    // Ensure we have auth token first
+    console.log('🔐 Getting auth token...');
+    const token = await ensureToken();
+    if (!token) throw new Error('No auth token');
+    console.log('✅ Token OK');
+
+    const signature = await getDefaultSignature();
+    console.log('📝 Signature loaded');
     
-    // Build HTML body
-    const htmlBody = job.body.replace(/\n/g, '<br>');
+    // Convert body to HTML
+    const htmlBody = job.body.replace(/\r?\n/g, '<br>');
     const fullBody = `${htmlBody}<br><br>${signature}`;
 
-    // Build and send email
+    console.log('📧 Building email for:', job.customer.Email);
+    console.log('📧 Subject:', job.subject);
+
+    // Build raw email
     const raw = await buildRawEmail({
       to: job.customer.Email,
       subject: job.subject,
@@ -151,13 +170,12 @@ async function processNextJob() {
       attachments: job.attachments || []
     });
 
+    console.log('📤 Sending via Gmail API...');
     await gmailSendRaw(raw);
 
-    // Update job status
     job.status = 'DONE';
     job.sentAt = new Date().toISOString();
     
-    // Log success
     await addSendLog({
       date: job.sentAt,
       Company_Name: job.customer.Company_Name,
@@ -168,10 +186,10 @@ async function processNextJob() {
     });
 
     console.log(`✅ Sent to ${job.customer.Email}`);
-    updateWorkerStatus({ total, sent: sent + 1, failed, isRunning: true, lastLog: `✅ Sent to ${job.customer.Email}` });
+    await updateWorkerStatus({ total, sent: sent + 1, failed, isRunning: true, lastLog: `✅ Sent to ${job.customer.Email}` });
 
   } catch (err) {
-    console.error(`❌ Failed to send to ${job.customer.Email}:`, err);
+    console.error(`❌ Failed: ${job.customer.Email}`, err);
     job.status = 'FAILED';
     job.error = err.message;
 
@@ -185,21 +203,18 @@ async function processNextJob() {
       error: err.message
     });
 
-    updateWorkerStatus({ total, sent, failed: failed + 1, isRunning: true, lastLog: `❌ Failed: ${job.customer.Email} - ${err.message}` });
+    await updateWorkerStatus({ total, sent, failed: failed + 1, isRunning: true, lastLog: `❌ Failed: ${job.customer.Email} - ${err.message}` });
   }
 
   // Save updated queue
   await chrome.storage.local.set({ jobQueue });
-
-  // Update daily count
   await updateDailyCount();
 
   // Schedule next job
   if (workerRunning) {
     const delay = getDelay();
-    console.log(`⏳ Next job in ${delay}ms`);
-    updateWorkerStatus({ nextSendIn: delay });
-    
+    console.log(`⏳ Next in ${delay}ms`);
+    await updateWorkerStatus({ nextSendIn: delay });
     workerTimeout = setTimeout(processNextJob, delay);
   }
 }
@@ -220,7 +235,6 @@ async function addSendLog(log) {
 async function updateDailyCount() {
   const today = new Date().toISOString().split('T')[0];
   const { sentToday = [], sentDate } = await chrome.storage.local.get(['sentToday', 'sentDate']);
-  
   if (sentDate !== today) {
     await chrome.storage.local.set({ sentToday: [1], sentDate: today });
   } else {
@@ -238,34 +252,28 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       switch (msg.type) {
         case 'AUTH': {
           const token = await ensureToken();
-          sendResponse({ ok: !!token });
+          sendResponse({ ok: !!token, token });
           break;
         }
-
         case 'START_WORKER': {
           const result = await startWorker(msg.delayConfig);
           sendResponse(result);
           break;
         }
-
         case 'STOP_WORKER': {
-          const result = stopWorker();
-          sendResponse(result);
+          sendResponse(stopWorker());
           break;
         }
-
         case 'GET_WORKER_STATUS': {
           const { workerStatus } = await chrome.storage.local.get('workerStatus');
           sendResponse({ ok: true, status: workerStatus });
           break;
         }
-
         case 'CLEAR_QUEUE': {
           await chrome.storage.local.set({ jobQueue: [] });
           sendResponse({ ok: true });
           break;
         }
-
         default:
           sendResponse({ ok: false, error: 'Unknown message type' });
       }
@@ -277,18 +285,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// ========== STARTUP ==========
-chrome.runtime.onStartup.addListener(async () => {
-  console.log('🔄 Extension started');
-  // Check if there are pending jobs and resume
-  const { jobQueue = [] } = await chrome.storage.local.get('jobQueue');
-  const pending = jobQueue.filter(j => j.status === 'PENDING').length;
-  if (pending > 0) {
-    console.log(`📋 Found ${pending} pending jobs`);
-  }
-});
-
-// Keep service worker alive when processing
+// Keep service worker alive
 chrome.alarms.create('keepAlive', { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'keepAlive' && workerRunning) {

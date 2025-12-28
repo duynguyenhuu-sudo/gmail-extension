@@ -3,20 +3,46 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
 // ========== DATA STORES ==========
-let companyInsight = [];  // File 1: {Company_Name, Customer_Name, Email, Customer_Domain}
-let domainMaster = {};    // File 2: {Domain: {Title_Mail, CaseStudies[]}}
-let mailTemplate = '';    // File 3: Email template
-let attachments = [];     // Attachments
+let companyInsight = [];  // File 1
+let domainMaster = {};    // File 2
+let mailTemplate = '';    // File 3
+let attachments = [];
 let isDataValidated = false;
 
 const DAILY_LIMIT = 100;
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
 const DEFAULT_TEMPLATE = `初めまして。どうぞ良い新しい一週間が元気いっぱいでありますように。
-GITS 株式会社の営業部のアインと申します。
+GITS株式会社の営業部のアインと申します。
 
-開発実績(一部):
+御社のウェブサイトを拝見し、ITを活用した事業展開に深く感銘を受けました。
+弊社はベトナムを拠点に、日本子会社を通じて日系企業様向けにアプリ・システム開発や業務DXを支援しており、貴社の今後のIT推進にお役立てできるのではと考え、ご連絡差し上げました。
+
+現時点では、新しいアプリ、システム開発、ウェブサイト構築や業務ソリューション、IT推進、DX導入をご検討されていますでしょうか。
+
+【GITS株式会社について】
+ベトナム本社・日本拠点を持ち、製造・物流・医療・IoTなど幅広い分野で開発実績を積んでおります。
+
+主なサービス：
+・ITコンサルティング／システム・アプリ開発
+・保守・運用サポート
+・ITエンジニア派遣（オンサイト・ラボ型対応）
+
+開発実績（一部）：
 {{CaseStudy_List}}
+
+GITSの特徴：
+・CMMI 2.0 Level 3準拠の品質管理体制
+・日本語堪能なPMとコミュニケーターによる円滑な対応
+・コスト最適化と柔軟な開発体制（小規模～大規模案件まで対応）
+・情報セキュリティ管理（ISO準拠）
+
+以上です。参考資料として会社案内と開発の流れを添付しております。
+もしご関心をお持ちいただけましたら、簡単にオンラインでご紹介させていただきます。
+また、日本在留のGITS部長が直接お伺いしての対面でも、ご希望に合わせて調整させていただきます。
+
+貴社のDX推進やIT課題の解決に、GITSを選択の一つを考慮していただけますと幸いです。
+これまでお時間いただきありがとうございます。
 
 何卒よろしくお願い申し上げます。`;
 
@@ -24,13 +50,13 @@ GITS 株式会社の営業部のアインと申します。
 document.addEventListener('DOMContentLoaded', async () => {
   $('#bodyTemplate').value = DEFAULT_TEMPLATE;
   $('#logDate').valueAsDate = new Date();
-  
   await loadStats();
   setupTabs();
   setupFileHandlers();
   setupEventListeners();
   await loadLogs();
 });
+
 
 // ========== TAB NAVIGATION ==========
 function setupTabs() {
@@ -42,6 +68,13 @@ function setupTabs() {
       $(`#tab-${tab.dataset.tab}`).classList.add('active');
     });
   });
+}
+
+function switchTab(tabName) {
+  $$('.tab').forEach(t => t.classList.remove('active'));
+  $$('.tab-content').forEach(c => c.classList.remove('active'));
+  $(`.tab[data-tab="${tabName}"]`).classList.add('active');
+  $(`#tab-${tabName}`).classList.add('active');
 }
 
 // ========== FILE HANDLERS ==========
@@ -82,15 +115,18 @@ function setupFileHandlers() {
     }
   });
 
-  // File 3: Mail Template
+  // File 3: Mail Template (Word/TXT/HTML)
   $('#fileTemplate').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const label = $('label[for="fileTemplate"]');
+    label.textContent = '⏳ Reading...';
     try {
-      mailTemplate = await file.text();
+      mailTemplate = await readTemplateFile(file);
       $('#bodyTemplate').value = mailTemplate;
-      $('label[for="fileTemplate"]').textContent = `✅ ${file.name}`;
+      label.textContent = `✅ ${file.name}`;
     } catch (err) {
+      label.textContent = '❌ Error';
       showStatus('#validateStatus', err.message, 'err');
     }
   });
@@ -99,52 +135,88 @@ function setupFileHandlers() {
   $('#fileAttach').addEventListener('change', handleAttachments);
 }
 
+// Read Word (.docx) file
+async function readTemplateFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  
+  if (ext === 'docx') {
+    // Read Word file using mammoth.js or simple extraction
+    const arrayBuffer = await file.arrayBuffer();
+    const text = await extractTextFromDocx(arrayBuffer);
+    return text;
+  } else {
+    // TXT or HTML
+    return await file.text();
+  }
+}
+
+// Simple DOCX text extraction (without mammoth.js)
+async function extractTextFromDocx(arrayBuffer) {
+  try {
+    // DOCX is a ZIP file, we need to extract document.xml
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const docXml = await zip.file('word/document.xml').async('string');
+    
+    // Parse XML and extract text
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'text/xml');
+    
+    // Get all text nodes
+    const textNodes = xmlDoc.getElementsByTagName('w:t');
+    const paragraphs = xmlDoc.getElementsByTagName('w:p');
+    
+    let result = '';
+    let currentParagraph = '';
+    
+    for (let p of paragraphs) {
+      const texts = p.getElementsByTagName('w:t');
+      let paraText = '';
+      for (let t of texts) {
+        paraText += t.textContent || '';
+      }
+      if (paraText) {
+        result += paraText + '\n';
+      }
+    }
+    
+    return result.trim();
+  } catch (err) {
+    console.error('DOCX parse error:', err);
+    throw new Error('Cannot read Word file. Please use .txt format or copy-paste content.');
+  }
+}
+
 
 // ========== EVENT LISTENERS ==========
 function setupEventListeners() {
-  // Validate button
   $('#btnValidate').addEventListener('click', validateAndLoadData);
-
-  // Preview customer select
   $('#previewCustomer').addEventListener('change', renderEmailPreview);
-
-  // Confirm preview
   $('#btnConfirmPreview').addEventListener('click', () => {
     if (!isDataValidated) return showStatus('#validateStatus', 'Please validate data first', 'err');
     switchTab('send');
   });
 
-  // Auth
   $('#btnAuth').addEventListener('click', async () => {
     showStatus('#authStatus', 'Logging in...', 'ok');
     const { ok, error } = await sendMsg({ type: 'AUTH' });
     showStatus('#authStatus', ok ? '✅ Ready!' : `❌ ${error}`, ok ? 'ok' : 'err');
   });
 
-  // Delay mode
   $('#delayMode').addEventListener('change', () => {
     const isRandom = $('#delayMode').value === 'random';
     $('#randomDelayWrapper').style.display = isRandom ? 'block' : 'none';
     $('#fixedDelayWrapper').style.display = isRandom ? 'none' : 'block';
   });
 
-  // Queue & Send
+  $('#btnSendNow').addEventListener('click', sendNow);
   $('#btnAddToQueue').addEventListener('click', addToQueue);
   $('#btnStartWorker').addEventListener('click', startWorker);
   $('#btnStopWorker').addEventListener('click', stopWorker);
 
-  // Logs
   $('#btnFilterLogs').addEventListener('click', loadLogs);
   $('#btnExportToday').addEventListener('click', () => exportLogs('today'));
   $('#btnExportFiltered').addEventListener('click', () => exportLogs('filtered'));
   $('#btnClearOldLogs').addEventListener('click', clearOldLogs);
-}
-
-function switchTab(tabName) {
-  $$('.tab').forEach(t => t.classList.remove('active'));
-  $$('.tab-content').forEach(c => c.classList.remove('active'));
-  $(`.tab[data-tab="${tabName}"]`).classList.add('active');
-  $(`#tab-${tabName}`).classList.add('active');
 }
 
 // ========== VALIDATION ==========
@@ -152,55 +224,37 @@ async function validateAndLoadData() {
   const errors = [];
   const warnings = [];
 
-  // Check File 1
   if (!companyInsight.length) {
     errors.push('❌ File 1 (Company Insight) is required');
   } else {
-    // Validate emails
     const invalidEmails = companyInsight.filter(c => !c.Email || !c.Email.includes('@'));
-    if (invalidEmails.length) {
-      errors.push(`❌ ${invalidEmails.length} invalid emails found`);
-    }
+    if (invalidEmails.length) errors.push(`❌ ${invalidEmails.length} invalid emails`);
 
-    // Validate domains exist in Domain Master
     if (Object.keys(domainMaster).length) {
       const unknownDomains = new Set();
       companyInsight.forEach(c => {
         const domains = c.Customer_Domain.split(/[,\s]+/).filter(d => d);
-        domains.forEach(d => {
-          if (!domainMaster[d.toUpperCase()]) unknownDomains.add(d);
-        });
+        domains.forEach(d => { if (!domainMaster[d.toUpperCase()]) unknownDomains.add(d); });
       });
-      if (unknownDomains.size) {
-        warnings.push(`⚠️ Unknown domains: ${[...unknownDomains].join(', ')}`);
-      }
+      if (unknownDomains.size) warnings.push(`⚠️ Unknown domains: ${[...unknownDomains].join(', ')}`);
     }
   }
 
-  // Check File 2
-  if (!Object.keys(domainMaster).length) {
-    errors.push('❌ File 2 (Domain Master) is required');
-  }
+  if (!Object.keys(domainMaster).length) errors.push('❌ File 2 (Domain Master) is required');
 
-  // Get template
   mailTemplate = $('#bodyTemplate').value || DEFAULT_TEMPLATE;
 
-  // Show results
   if (errors.length) {
     showStatus('#validateStatus', errors.join('<br>'), 'err');
     isDataValidated = false;
     return;
   }
 
-  if (warnings.length) {
-    showStatus('#validateStatus', warnings.join('<br>') + '<br>✅ Data loaded with warnings', 'warn');
-  } else {
-    showStatus('#validateStatus', '✅ All data validated successfully!', 'ok');
-  }
+  showStatus('#validateStatus', warnings.length 
+    ? warnings.join('<br>') + '<br>✅ Data loaded with warnings' 
+    : '✅ All data validated!', warnings.length ? 'warn' : 'ok');
 
   isDataValidated = true;
-
-  // Populate preview
   populatePreviewCustomers();
   renderCustomerList();
   switchTab('preview');
@@ -210,11 +264,11 @@ async function validateAndLoadData() {
 // ========== PREVIEW ==========
 function populatePreviewCustomers() {
   const select = $('#previewCustomer');
-  select.innerHTML = '<option value="">-- Select customer to preview --</option>';
+  select.innerHTML = '<option value="">-- Select customer --</option>';
   companyInsight.forEach((c, i) => {
     const opt = document.createElement('option');
     opt.value = i;
-    opt.textContent = `${c.Company_Name} - ${c.Customer_Name} (${c.Email})`;
+    opt.textContent = `${c.Company_Name} - ${c.Customer_Name} (${c.Customer_Domain})`;
     select.appendChild(opt);
   });
 }
@@ -251,25 +305,41 @@ function buildEmailContent(customer) {
   const { Company_Name, Customer_Name, Customer_Domain } = customer;
   const { caseStudies, title } = buildCaseStudyList(Customer_Domain);
 
-  // Build case study text
-  let caseStudyText = '';
-  if (caseStudies.length > 0) {
-    caseStudyText = caseStudies.map(cs => `・${cs}`).join('\n') + ' など';
-  }
-
-  // Build header
+  // Build header: Company + Name + 様
   const nameWithSama = Customer_Name ? `${Customer_Name} 様` : '様';
   const header = Company_Name ? `${Company_Name}\n${nameWithSama}` : nameWithSama;
 
   // Subject from domain
   const subject = title || '【GITS 株式会社】アプリ・システム開発で貴社の DX 推進を支援いたします';
 
-  // Replace placeholders in template
+  // Build case study text with など at end
+  let caseStudyText = '';
+  if (caseStudies.length > 0) {
+    caseStudyText = caseStudies.map(cs => `・${cs}`).join('\n') + ' など';
+  }
+
+  // Replace placeholders
   let body = (mailTemplate || DEFAULT_TEMPLATE)
     .replace(/\{\{Company_Name\}\}/g, Company_Name || '')
     .replace(/\{\{Customer_Name\}\}/g, Customer_Name || '')
     .replace(/\{\{Title_Mail\}\}/g, title || '')
     .replace(/\{\{CaseStudy_List\}\}/g, caseStudyText);
+
+  // Support individual CaseStudy placeholders: {{CaseStudy_1}}, {{CaseStudy_2}}, etc.
+  for (let i = 0; i < 10; i++) {
+    const placeholder = `{{CaseStudy_${i + 1}}}`;
+    const cs = caseStudies[i] || '';
+    body = body.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), cs);
+  }
+
+  // Also support {{READ_Casestudy_X}} format
+  for (let i = 0; i < 10; i++) {
+    const placeholder1 = `{{READ_Casestudy_${i + 1}}}`;
+    const placeholder2 = `{{READ_CaseStudy_${i + 1}}}`;
+    const cs = caseStudies[i] || '';
+    body = body.replace(new RegExp(placeholder1.replace(/[{}]/g, '\\$&'), 'gi'), cs);
+    body = body.replace(new RegExp(placeholder2.replace(/[{}]/g, '\\$&'), 'gi'), cs);
+  }
 
   body = `${header}\n\n${body}`;
 
@@ -279,41 +349,82 @@ function buildEmailContent(customer) {
 function buildCaseStudyList(customerDomains) {
   if (!customerDomains) return { caseStudies: [], title: '' };
   
-  const domains = customerDomains.split(/[,\s]+/).filter(d => d);
+  const domains = customerDomains.split(/[,\s]+/).filter(d => d).map(d => d.toUpperCase());
   if (domains.length === 0) return { caseStudies: [], title: '' };
 
+  const TARGET_CS = 4; // Luôn đủ 4 CaseStudy
   let caseStudies = [];
   let title = '';
 
+  // Lấy title từ domain đầu tiên
+  const firstMapping = domainMaster[domains[0]];
+  title = firstMapping?.Title_Mail || '';
+
   if (domains.length === 1) {
-    // Single domain: 4 case studies
-    const domain = domains[0].toUpperCase();
-    const mapping = domainMaster[domain];
-    if (mapping) {
-      title = mapping.Title_Mail || '';
-      caseStudies = (mapping.CaseStudies || []).slice(0, 4);
+    // 1 Domain: Random 4 CS từ danh sách
+    const mapping = domainMaster[domains[0]];
+    if (mapping && mapping.CaseStudies && mapping.CaseStudies.length > 0) {
+      const allCS = [...mapping.CaseStudies];
+      caseStudies = shuffleArray(allCS).slice(0, TARGET_CS);
     }
   } else {
-    // Multiple domains: 2 case studies per domain
-    const firstDomain = domains[0].toUpperCase();
-    title = domainMaster[firstDomain]?.Title_Mail || '';
+    // 2+ Domains: Mỗi domain ít nhất 1 CS, bổ sung để đủ 4
+    const usedCS = new Set();
+    const allAvailableCS = []; // Pool để bổ sung
 
+    // Bước 1: Lấy 1 CS random từ mỗi domain
     domains.forEach(d => {
-      const mapping = domainMaster[d.toUpperCase()];
-      if (mapping && mapping.CaseStudies) {
-        caseStudies.push(...mapping.CaseStudies.slice(0, 2));
+      const mapping = domainMaster[d];
+      if (mapping && mapping.CaseStudies && mapping.CaseStudies.length > 0) {
+        const domainCS = [...mapping.CaseStudies];
+        const shuffled = shuffleArray(domainCS);
+        
+        // Lấy 1 CS đầu tiên cho domain này
+        if (shuffled.length > 0) {
+          caseStudies.push(shuffled[0]);
+          usedCS.add(shuffled[0]);
+        }
+        
+        // Thêm các CS còn lại vào pool
+        shuffled.slice(1).forEach(cs => {
+          if (!usedCS.has(cs)) {
+            allAvailableCS.push({ cs, domain: d });
+          }
+        });
       }
     });
+
+    // Bước 2: Bổ sung random từ pool để đủ 4 CS
+    if (caseStudies.length < TARGET_CS && allAvailableCS.length > 0) {
+      const shuffledPool = shuffleArray(allAvailableCS);
+      for (const item of shuffledPool) {
+        if (caseStudies.length >= TARGET_CS) break;
+        if (!usedCS.has(item.cs)) {
+          caseStudies.push(item.cs);
+          usedCS.add(item.cs);
+        }
+      }
+    }
   }
 
-  return { caseStudies, title };
+  return { caseStudies: caseStudies.slice(0, TARGET_CS), title };
+}
+
+// Fisher-Yates shuffle
+function shuffleArray(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
 
-// ========== QUEUE & WORKER ==========
-async function addToQueue() {
+// ========== SEND NOW (1 click) ==========
+async function sendNow() {
   if (!isDataValidated) return showStatus('#sendStatus', '❌ Please validate data first', 'err');
-  if (!companyInsight.length) return showStatus('#sendStatus', '❌ No customers to send', 'err');
+  if (!companyInsight.length) return showStatus('#sendStatus', '❌ No customers', 'err');
 
   // Check daily limit
   const stats = await chrome.storage.local.get(['sentToday', 'sentDate']);
@@ -321,16 +432,64 @@ async function addToQueue() {
   const sentCount = (stats.sentDate === today && Array.isArray(stats.sentToday)) ? stats.sentToday.length : 0;
   const remaining = DAILY_LIMIT - sentCount;
 
-  if (remaining <= 0) {
-    return showStatus('#sendStatus', '❌ Daily limit reached (100 emails)', 'err');
-  }
+  if (remaining <= 0) return showStatus('#sendStatus', '❌ Daily limit reached (100)', 'err');
 
-  const toQueue = companyInsight.slice(0, remaining);
-  if (toQueue.length < companyInsight.length) {
-    showStatus('#sendStatus', `⚠️ Only ${toQueue.length}/${companyInsight.length} will be queued (daily limit)`, 'warn');
+  const toSend = companyInsight.slice(0, remaining);
+  if (toSend.length < companyInsight.length) {
+    showStatus('#sendStatus', `⚠️ Only ${toSend.length}/${companyInsight.length} will be sent (limit)`, 'warn');
   }
 
   // Build jobs
+  const jobs = toSend.map((customer, i) => {
+    const { subject, body } = buildEmailContent(customer);
+    return {
+      id: Date.now() + i,
+      customer,
+      subject,
+      body,
+      attachments: attachments.map(a => ({ name: a.name, mimeType: a.mimeType, base64: a.base64, size: a.size })),
+      status: 'PENDING',
+      createdAt: new Date().toISOString()
+    };
+  });
+
+  // Clear old queue and add new jobs
+  await chrome.storage.local.set({ jobQueue: jobs });
+
+  // Get delay config
+  const delayMode = $('#delayMode').value;
+  const delayConfig = delayMode === 'random' 
+    ? { mode: 'random', min: parseInt($('#delayMin').value) * 1000, max: parseInt($('#delayMax').value) * 1000 }
+    : { mode: 'fixed', delay: parseInt($('#fixedDelay').value) * 1000 };
+
+  showStatus('#sendStatus', `🚀 Sending ${jobs.length} emails...`, 'ok');
+  $('#liveLog').innerHTML = '';
+  await updateQueueCount();
+
+  // Start worker immediately
+  const { ok, error } = await sendMsg({ type: 'START_WORKER', delayConfig });
+  
+  if (ok) {
+    startProgressPolling();
+  } else {
+    showStatus('#sendStatus', `❌ ${error}`, 'err');
+  }
+}
+
+// ========== QUEUE MODE (2 steps) ==========
+async function addToQueue() {
+  if (!isDataValidated) return showStatus('#sendStatus', '❌ Please validate data first', 'err');
+  if (!companyInsight.length) return showStatus('#sendStatus', '❌ No customers', 'err');
+
+  const stats = await chrome.storage.local.get(['sentToday', 'sentDate']);
+  const today = new Date().toISOString().split('T')[0];
+  const sentCount = (stats.sentDate === today && Array.isArray(stats.sentToday)) ? stats.sentToday.length : 0;
+  const remaining = DAILY_LIMIT - sentCount;
+
+  if (remaining <= 0) return showStatus('#sendStatus', '❌ Daily limit reached (100)', 'err');
+
+  const toQueue = companyInsight.slice(0, remaining);
+
   const jobs = toQueue.map((customer, i) => {
     const { subject, body } = buildEmailContent(customer);
     return {
@@ -344,11 +503,10 @@ async function addToQueue() {
     };
   });
 
-  // Save to queue
   const { jobQueue = [] } = await chrome.storage.local.get('jobQueue');
   await chrome.storage.local.set({ jobQueue: [...jobQueue, ...jobs] });
 
-  showStatus('#sendStatus', `✅ Added ${jobs.length} jobs to queue`, 'ok');
+  showStatus('#sendStatus', `✅ Added ${jobs.length} to queue. Click "Start Queue" to send.`, 'ok');
   await updateQueueCount();
 }
 
@@ -361,7 +519,8 @@ async function startWorker() {
   const { ok, error } = await sendMsg({ type: 'START_WORKER', delayConfig });
   
   if (ok) {
-    showStatus('#sendStatus', '▶️ Worker started', 'ok');
+    showStatus('#sendStatus', '▶️ Queue started', 'ok');
+    $('#liveLog').innerHTML = '';
     startProgressPolling();
   } else {
     showStatus('#sendStatus', `❌ ${error}`, 'err');
@@ -370,7 +529,7 @@ async function startWorker() {
 
 async function stopWorker() {
   const { ok } = await sendMsg({ type: 'STOP_WORKER' });
-  showStatus('#sendStatus', ok ? '⏹️ Worker stopped' : '❌ Failed to stop', ok ? 'ok' : 'err');
+  showStatus('#sendStatus', ok ? '⏹️ Stopped' : '❌ Failed', ok ? 'ok' : 'err');
   stopProgressPolling();
 }
 
@@ -381,32 +540,27 @@ function startProgressPolling() {
 }
 
 function stopProgressPolling() {
-  if (progressInterval) {
-    clearInterval(progressInterval);
-    progressInterval = null;
-  }
+  if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
 }
 
 async function updateProgress() {
   const { workerStatus } = await chrome.storage.local.get('workerStatus');
   if (!workerStatus) return;
 
-  const { total, sent, failed, nextSendIn, isRunning, lastLog } = workerStatus;
+  const { total = 0, sent = 0, failed = 0, nextSendIn = 0, isRunning, lastLog } = workerStatus;
   const done = sent + failed;
   const percent = total > 0 ? (done / total * 100) : 0;
 
   $('#progressBar').style.width = `${percent}%`;
-  $('#progressText').textContent = `${done}/${total} (${sent} sent, ${failed} failed)`;
+  $('#progressText').textContent = `${done}/${total} (${sent} ✓, ${failed} ✗)`;
   $('#nextSendIn').textContent = isRunning ? Math.max(0, Math.ceil(nextSendIn / 1000)) : '--';
 
-  if (lastLog) {
-    appendLog(lastLog);
-  }
+  if (lastLog) appendLog(lastLog);
 
   await loadStats();
   await updateQueueCount();
 
-  if (!isRunning && done >= total) {
+  if (!isRunning && done >= total && total > 0) {
     stopProgressPolling();
     showStatus('#sendStatus', '✅ All jobs completed!', 'ok');
   }
@@ -424,37 +578,25 @@ function appendLog(msg) {
 async function loadLogs() {
   const dateFilter = $('#logDate').value;
   const statusFilter = $('#logStatus').value;
-
   const { sendLogs = [] } = await chrome.storage.local.get('sendLogs');
   
   let filtered = sendLogs;
-  if (dateFilter) {
-    filtered = filtered.filter(l => l.date && l.date.startsWith(dateFilter));
-  }
-  if (statusFilter) {
-    filtered = filtered.filter(l => l.status === statusFilter);
-  }
+  if (dateFilter) filtered = filtered.filter(l => l.date && l.date.startsWith(dateFilter));
+  if (statusFilter) filtered = filtered.filter(l => l.status === statusFilter);
 
-  // Summary
   const success = filtered.filter(l => l.status === 'Success').length;
   const failed = filtered.filter(l => l.status === 'Failed').length;
   $('#logTotal').textContent = filtered.length;
   $('#logSuccess').textContent = success;
   $('#logFailed').textContent = failed;
 
-  // Table
-  const tbody = $('#logTableBody');
-  tbody.innerHTML = filtered.map(l => `
+  $('#logTableBody').innerHTML = filtered.map(l => `
     <tr>
       <td style="padding:6px; border-bottom:1px solid #eee;">${l.date ? new Date(l.date).toLocaleString('ja-JP') : ''}</td>
       <td style="padding:6px; border-bottom:1px solid #eee;">${l.Company_Name || ''}</td>
       <td style="padding:6px; border-bottom:1px solid #eee;">${l.Customer_Name || ''}</td>
       <td style="padding:6px; border-bottom:1px solid #eee;">${l.Email || ''}</td>
-      <td style="padding:6px; border-bottom:1px solid #eee;">
-        <span style="color:${l.status === 'Success' ? '#27ae60' : l.status === 'Failed' ? '#e74c3c' : '#f39c12'};">
-          ${l.status || 'Pending'}
-        </span>
-      </td>
+      <td style="padding:6px; border-bottom:1px solid #eee; color:${l.status === 'Success' ? '#27ae60' : '#e74c3c'};">${l.status || ''}</td>
     </tr>
   `).join('');
 }
@@ -464,9 +606,8 @@ async function exportLogs(type) {
   const today = new Date().toISOString().split('T')[0];
   
   let data = sendLogs;
-  if (type === 'today') {
-    data = sendLogs.filter(l => l.date && l.date.startsWith(today));
-  } else if (type === 'filtered') {
+  if (type === 'today') data = sendLogs.filter(l => l.date && l.date.startsWith(today));
+  else if (type === 'filtered') {
     const dateFilter = $('#logDate').value;
     const statusFilter = $('#logStatus').value;
     if (dateFilter) data = data.filter(l => l.date && l.date.startsWith(dateFilter));
@@ -475,7 +616,6 @@ async function exportLogs(type) {
 
   if (!data.length) return alert('No data to export');
 
-  // Group by domain for summary
   const domainStats = {};
   data.forEach(l => {
     const domain = l.Customer_Domain || 'Unknown';
@@ -511,11 +651,9 @@ async function exportLogs(type) {
 
 async function clearOldLogs() {
   if (!confirm('Delete logs older than 7 days?')) return;
-  
   const { sendLogs = [] } = await chrome.storage.local.get('sendLogs');
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const filtered = sendLogs.filter(l => l.date && new Date(l.date).getTime() > cutoff);
-  
   await chrome.storage.local.set({ sendLogs: filtered });
   await loadLogs();
   alert(`Deleted ${sendLogs.length - filtered.length} old logs`);
@@ -527,7 +665,7 @@ async function handleAttachments(e) {
   const files = Array.from(e.target.files || []);
   if (!files.length) return;
   
-  if (files.length > 3) alert('Only first 3 files will be kept');
+  if (files.length > 3) alert('Only first 3 files kept');
   const picked = files.slice(0, 3);
   
   const totalSize = picked.reduce((sum, f) => sum + f.size, 0);
@@ -545,7 +683,6 @@ async function handleAttachments(e) {
       base64: await fileToBase64(f),
       size: f.size
     })));
-    
     renderAttachments();
     label.textContent = `✅ ${attachments.length} files`;
     e.target.value = '';
@@ -557,11 +694,7 @@ async function handleAttachments(e) {
 
 function renderAttachments() {
   const container = $('#attachedFiles');
-  if (!attachments.length) {
-    container.innerHTML = '';
-    $('#attachInfo').textContent = '0 files.';
-    return;
-  }
+  if (!attachments.length) { container.innerHTML = ''; $('#attachInfo').textContent = '0 files.'; return; }
 
   const totalMB = (attachments.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1);
   $('#attachInfo').innerHTML = `<strong>${attachments.length} files</strong> (${totalMB} MB)`;
@@ -574,16 +707,12 @@ function renderAttachments() {
   `).join('');
 }
 
-window.removeAttachment = (i) => {
-  attachments.splice(i, 1);
-  renderAttachments();
-};
+window.removeAttachment = (i) => { attachments.splice(i, 1); renderAttachments(); };
 
 // ========== STATS ==========
 async function loadStats() {
   const today = new Date().toISOString().split('T')[0];
   const { sentToday = [], sentDate } = await chrome.storage.local.get(['sentToday', 'sentDate']);
-  
   const count = sentDate === today ? sentToday.length : 0;
   $('#dailyCount').textContent = count;
   $('#limitWarning').style.display = count >= DAILY_LIMIT ? 'block' : 'none';
@@ -591,10 +720,8 @@ async function loadStats() {
 
 async function updateQueueCount() {
   const { jobQueue = [] } = await chrome.storage.local.get('jobQueue');
-  const pending = jobQueue.filter(j => j.status === 'PENDING').length;
-  $('#queueCount').textContent = pending;
+  $('#queueCount').textContent = jobQueue.filter(j => j.status === 'PENDING').length;
 }
-
 
 // ========== PARSERS ==========
 async function readExcelFile(file) {
@@ -606,11 +733,10 @@ async function readExcelFile(file) {
 function parseCompanyInsight(data) {
   if (!data.length) return [];
   const headers = data[0].map(h => (h || '').toString().trim().toLowerCase());
-  
-  const cIdx = findColumnIndex(headers, ['company_name', 'company', '会社名']);
-  const nIdx = findColumnIndex(headers, ['customer_name', 'name', '名前']);
-  const eIdx = findColumnIndex(headers, ['email', 'mail', 'メール']);
-  const dIdx = findColumnIndex(headers, ['customer_domain', 'domain']);
+  const cIdx = findCol(headers, ['company_name', 'company', '会社名']);
+  const nIdx = findCol(headers, ['customer_name', 'name', '名前']);
+  const eIdx = findCol(headers, ['email', 'mail', 'メール']);
+  const dIdx = findCol(headers, ['customer_domain', 'domain']);
 
   return data.slice(1)
     .filter(row => row && row.length > Math.max(cIdx, nIdx, eIdx))
@@ -626,63 +752,42 @@ function parseCompanyInsight(data) {
 function parseDomainMaster(data) {
   if (!data.length) return {};
   const headers = data[0].map(h => (h || '').toString().trim().toLowerCase());
-  
-  const dIdx = findColumnIndex(headers, ['domain', 'ドメイン']);
-  const tIdx = findColumnIndex(headers, ['title_mail', 'title']);
-  
-  // Find CaseStudy columns
+  const dIdx = findCol(headers, ['domain', 'ドメイン']);
+  const tIdx = findCol(headers, ['title_mail', 'title']);
   const csIndices = [];
-  headers.forEach((h, i) => {
-    if (/casestudy|case_study|cs_/i.test(h)) csIndices.push(i);
-  });
+  headers.forEach((h, i) => { if (/casestudy|case_study|cs_/i.test(h)) csIndices.push(i); });
 
   const mapping = {};
   data.slice(1).forEach(row => {
     if (!row || !row[dIdx]) return;
     const domain = row[dIdx].toString().trim().toUpperCase();
-    const caseStudies = csIndices
-      .map(i => (row[i] || '').toString().trim())
-      .filter(cs => cs && !/^#?null$/i.test(cs));
-    
-    mapping[domain] = {
-      Title_Mail: (row[tIdx] || '').toString().trim(),
-      CaseStudies: caseStudies
-    };
+    const caseStudies = csIndices.map(i => (row[i] || '').toString().trim()).filter(cs => cs && !/^#?null$/i.test(cs));
+    mapping[domain] = { Title_Mail: (row[tIdx] || '').toString().trim(), CaseStudies: caseStudies };
   });
   return mapping;
 }
 
-function findColumnIndex(headers, names) {
+function findCol(headers, names) {
   const idx = headers.findIndex(h => names.includes(h));
-  return idx >= 0 ? idx : names.indexOf(names[0]);
+  return idx >= 0 ? idx : 0;
 }
 
 // ========== RENDERERS ==========
 function renderCompanyPreview() {
   const el = $('#customerPreview');
-  if (!companyInsight.length) {
-    el.textContent = 'No data.';
-    el.classList.add('muted');
-    return;
-  }
+  if (!companyInsight.length) { el.textContent = 'No data.'; el.classList.add('muted'); return; }
   el.classList.remove('muted');
-  el.textContent = companyInsight.slice(0, 5)
-    .map(c => `${c.Company_Name} | ${c.Customer_Name} | ${c.Email} | ${c.Customer_Domain}`)
-    .join('\n') + (companyInsight.length > 5 ? `\n... (+${companyInsight.length - 5} more)` : '');
+  el.textContent = companyInsight.slice(0, 5).map(c => `${c.Company_Name} | ${c.Customer_Name} | ${c.Email} | ${c.Customer_Domain}`).join('\n') 
+    + (companyInsight.length > 5 ? `\n... (+${companyInsight.length - 5})` : '');
 }
 
 function renderDomainPreview() {
   const el = $('#domainPreview');
   const domains = Object.keys(domainMaster);
-  if (!domains.length) {
-    el.textContent = 'No data.';
-    el.classList.add('muted');
-    return;
-  }
+  if (!domains.length) { el.textContent = 'No data.'; el.classList.add('muted'); return; }
   el.classList.remove('muted');
-  el.textContent = domains.slice(0, 5)
-    .map(d => `${d}: ${domainMaster[d].Title_Mail} | ${domainMaster[d].CaseStudies.length} CS`)
-    .join('\n') + (domains.length > 5 ? `\n... (+${domains.length - 5} more)` : '');
+  el.textContent = domains.slice(0, 5).map(d => `${d}: ${domainMaster[d].Title_Mail} | ${domainMaster[d].CaseStudies.length} CS`).join('\n')
+    + (domains.length > 5 ? `\n... (+${domains.length - 5})` : '');
 }
 
 // ========== HELPERS ==========
