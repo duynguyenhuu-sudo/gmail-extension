@@ -108,17 +108,26 @@ function getDelay() {
 
 // ========== WORKER ==========
 async function startWorker(config) {
-  if (workerRunning) return { ok: false, error: 'Worker already running' };
+  // Stop any existing worker first
+  if (workerRunning) {
+    console.log('⚠️ Worker already running, stopping first...');
+    stopWorker();
+    await new Promise(r => setTimeout(r, 100)); // Wait a bit
+  }
+  
   delayConfig = config || delayConfig;
   workerRunning = true;
-  console.log('🚀 Worker started');
+  console.log('🚀 Worker started with config:', delayConfig);
   processNextJob();
   return { ok: true };
 }
 
 function stopWorker() {
   workerRunning = false;
-  if (workerTimeout) { clearTimeout(workerTimeout); workerTimeout = null; }
+  if (workerTimeout) { 
+    clearTimeout(workerTimeout); 
+    workerTimeout = null; 
+  }
   updateWorkerStatus({ isRunning: false });
   console.log('⏹️ Worker stopped');
   return { ok: true };
@@ -286,9 +295,38 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 // Keep service worker alive
-chrome.alarms.create('keepAlive', { periodInMinutes: 0.5 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'keepAlive' && workerRunning) {
-    console.log('💓 Worker heartbeat');
+chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 });
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === 'keepAlive') {
+    console.log('💓 Heartbeat');
+    
+    // Check if worker should be running but stopped
+    const { workerStatus, jobQueue = [] } = await chrome.storage.local.get(['workerStatus', 'jobQueue']);
+    const pendingJobs = jobQueue.filter(j => j.status === 'PENDING');
+    
+    if (workerStatus?.isRunning && !workerRunning && pendingJobs.length > 0) {
+      console.log('🔄 Resuming worker...');
+      workerRunning = true;
+      processNextJob();
+    }
   }
+});
+
+// Resume worker on startup if needed
+chrome.runtime.onStartup.addListener(async () => {
+  console.log('🚀 Extension started');
+  const { workerStatus, jobQueue = [] } = await chrome.storage.local.get(['workerStatus', 'jobQueue']);
+  const pendingJobs = jobQueue.filter(j => j.status === 'PENDING');
+  
+  if (pendingJobs.length > 0 && workerStatus?.isRunning) {
+    console.log(`📋 Resuming ${pendingJobs.length} pending jobs`);
+    workerRunning = true;
+    processNextJob();
+  }
+});
+
+// Also check on install/update
+chrome.runtime.onInstalled.addListener(async () => {
+  console.log('📦 Extension installed/updated');
+  chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 });
 });

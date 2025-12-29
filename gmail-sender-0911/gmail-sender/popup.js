@@ -48,14 +48,82 @@ GITSの特徴：
 
 // ========== INITIALIZATION ==========
 document.addEventListener('DOMContentLoaded', async () => {
-  $('#bodyTemplate').value = DEFAULT_TEMPLATE;
+  await loadSavedData(); // Load saved data first
   $('#logDate').valueAsDate = new Date();
   await loadStats();
   setupTabs();
   setupFileHandlers();
   setupEventListeners();
   await loadLogs();
+  await updateQueueCount();
+  
+  // Check if worker is running
+  const { workerStatus } = await chrome.storage.local.get('workerStatus');
+  if (workerStatus?.isRunning) {
+    showStatus('#sendStatus', '▶️ Worker đang chạy nền...', 'ok');
+    startProgressPolling();
+  }
+  
+  // Open in new tab button
+  $('#btnOpenTab')?.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') });
+    window.close();
+  });
 });
+
+// ========== SAVE/LOAD DATA ==========
+async function saveDataToStorage() {
+  await chrome.storage.local.set({
+    savedCompanyInsight: companyInsight,
+    savedDomainMaster: domainMaster,
+    savedMailTemplate: mailTemplate,
+    savedAttachments: attachments,
+    savedIsValidated: isDataValidated
+  });
+  console.log('💾 Data saved to storage');
+}
+
+async function loadSavedData() {
+  const data = await chrome.storage.local.get([
+    'savedCompanyInsight', 
+    'savedDomainMaster', 
+    'savedMailTemplate', 
+    'savedAttachments',
+    'savedIsValidated'
+  ]);
+  
+  if (data.savedCompanyInsight?.length) {
+    companyInsight = data.savedCompanyInsight;
+    renderCompanyPreview();
+    $('label[for="fileCustomer"]').textContent = `✅ ${companyInsight.length} customers (saved)`;
+  }
+  
+  if (data.savedDomainMaster && Object.keys(data.savedDomainMaster).length) {
+    domainMaster = data.savedDomainMaster;
+    renderDomainPreview();
+    $('label[for="fileDomain"]').textContent = `✅ ${Object.keys(domainMaster).length} domains (saved)`;
+  }
+  
+  if (data.savedMailTemplate) {
+    mailTemplate = data.savedMailTemplate;
+    $('#bodyTemplate').value = mailTemplate;
+  } else {
+    $('#bodyTemplate').value = DEFAULT_TEMPLATE;
+  }
+  
+  if (data.savedAttachments?.length) {
+    attachments = data.savedAttachments;
+    renderAttachments();
+  }
+  
+  if (data.savedIsValidated) {
+    isDataValidated = true;
+    populatePreviewCustomers();
+    renderCustomerList();
+  }
+  
+  console.log('📂 Data loaded from storage');
+}
 
 
 // ========== TAB NAVIGATION ==========
@@ -91,6 +159,7 @@ function setupFileHandlers() {
       renderCompanyPreview();
       label.textContent = `✅ ${companyInsight.length} customers`;
       isDataValidated = false;
+      await saveDataToStorage();
     } catch (err) {
       label.textContent = '❌ Error';
       showStatus('#validateStatus', err.message, 'err');
@@ -109,6 +178,7 @@ function setupFileHandlers() {
       renderDomainPreview();
       label.textContent = `✅ ${Object.keys(domainMaster).length} domains`;
       isDataValidated = false;
+      await saveDataToStorage();
     } catch (err) {
       label.textContent = '❌ Error';
       showStatus('#validateStatus', err.message, 'err');
@@ -120,70 +190,91 @@ function setupFileHandlers() {
     const file = e.target.files?.[0];
     if (!file) return;
     const label = $('label[for="fileTemplate"]');
+    const ext = file.name.split('.').pop().toLowerCase();
     label.textContent = '⏳ Reading...';
+    
     try {
-      mailTemplate = await readTemplateFile(file);
-      $('#bodyTemplate').value = mailTemplate;
-      label.textContent = `✅ ${file.name}`;
+      if (ext === 'docx') {
+        // DOCX file - need JSZip
+        if (typeof JSZip === 'undefined') {
+          throw new Error('JSZip not loaded. Please use .txt file instead.');
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const text = await extractTextFromDocx(arrayBuffer);
+        if (text && text.trim()) {
+          mailTemplate = text;
+          $('#bodyTemplate').value = mailTemplate;
+          label.textContent = `✅ ${file.name}`;
+          showStatus('#validateStatus', `✅ Template loaded: ${text.length} characters`, 'ok');
+          await saveDataToStorage();
+        } else {
+          throw new Error('Could not extract text from DOCX');
+        }
+      } else {
+        // TXT or HTML - read as text
+        const text = await file.text();
+        if (text && text.trim()) {
+          mailTemplate = text;
+          $('#bodyTemplate').value = mailTemplate;
+          label.textContent = `✅ ${file.name}`;
+          showStatus('#validateStatus', `✅ Template loaded: ${text.length} characters`, 'ok');
+          await saveDataToStorage();
+        } else {
+          throw new Error('Empty file');
+        }
+      }
     } catch (err) {
-      label.textContent = '❌ Error';
-      showStatus('#validateStatus', err.message, 'err');
+      console.error('Template read error:', err);
+      label.textContent = `❌ ${file.name}`;
+      showStatus('#validateStatus', `❌ Cannot read DOCX. Using existing template. Try .txt file or paste content.`, 'err');
+      // Don't change textarea content on error - keep existing template
     }
+  });
+
+  // Template textarea change
+  $('#bodyTemplate').addEventListener('change', async () => {
+    mailTemplate = $('#bodyTemplate').value;
+    await saveDataToStorage();
   });
 
   // Attachments
   $('#fileAttach').addEventListener('change', handleAttachments);
 }
 
-// Read Word (.docx) file
-async function readTemplateFile(file) {
-  const ext = file.name.split('.').pop().toLowerCase();
-  
-  if (ext === 'docx') {
-    // Read Word file using mammoth.js or simple extraction
-    const arrayBuffer = await file.arrayBuffer();
-    const text = await extractTextFromDocx(arrayBuffer);
-    return text;
-  } else {
-    // TXT or HTML
-    return await file.text();
-  }
-}
-
-// Simple DOCX text extraction (without mammoth.js)
+// Read Word (.docx) file - extract text from XML
 async function extractTextFromDocx(arrayBuffer) {
-  try {
-    // DOCX is a ZIP file, we need to extract document.xml
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    const docXml = await zip.file('word/document.xml').async('string');
-    
-    // Parse XML and extract text
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(docXml, 'text/xml');
-    
-    // Get all text nodes
-    const textNodes = xmlDoc.getElementsByTagName('w:t');
-    const paragraphs = xmlDoc.getElementsByTagName('w:p');
-    
-    let result = '';
-    let currentParagraph = '';
-    
-    for (let p of paragraphs) {
-      const texts = p.getElementsByTagName('w:t');
-      let paraText = '';
-      for (let t of texts) {
-        paraText += t.textContent || '';
-      }
-      if (paraText) {
-        result += paraText + '\n';
-      }
-    }
-    
-    return result.trim();
-  } catch (err) {
-    console.error('DOCX parse error:', err);
-    throw new Error('Cannot read Word file. Please use .txt format or copy-paste content.');
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const docXml = await zip.file('word/document.xml')?.async('string');
+  
+  if (!docXml) {
+    throw new Error('Invalid DOCX: no document.xml');
   }
+  
+  // Parse XML and extract text
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(docXml, 'text/xml');
+  
+  // Get all paragraphs
+  const paragraphs = xmlDoc.getElementsByTagName('w:p');
+  let result = [];
+  
+  for (let p of paragraphs) {
+    const texts = p.getElementsByTagName('w:t');
+    let paraText = '';
+    for (let t of texts) {
+      paraText += t.textContent || '';
+    }
+    if (paraText) {
+      result.push(paraText);
+    }
+  }
+  
+  const finalText = result.join('\n').trim();
+  if (!finalText) {
+    throw new Error('No text content found in DOCX');
+  }
+  
+  return finalText;
 }
 
 
@@ -217,6 +308,7 @@ function setupEventListeners() {
   $('#btnExportToday').addEventListener('click', () => exportLogs('today'));
   $('#btnExportFiltered').addEventListener('click', () => exportLogs('filtered'));
   $('#btnClearOldLogs').addEventListener('click', clearOldLogs);
+  $('#btnClearAllData').addEventListener('click', clearAllData);
 }
 
 // ========== VALIDATION ==========
@@ -255,6 +347,7 @@ async function validateAndLoadData() {
     : '✅ All data validated!', warnings.length ? 'warn' : 'ok');
 
   isDataValidated = true;
+  await saveDataToStorage();
   populatePreviewCustomers();
   renderCustomerList();
   switchTab('preview');
@@ -283,9 +376,9 @@ function renderEmailPreview() {
   }
 
   const customer = companyInsight[parseInt(idx)];
-  const { subject, body } = buildEmailContent(customer);
+  const { subject, body, caseStudies } = buildEmailContent(customer);
 
-  $('#previewDomain').value = customer.Customer_Domain || '(none)';
+  $('#previewDomain').value = `${customer.Customer_Domain || '(none)'} → ${caseStudies?.length || 0} CaseStudies`;
   $('#previewSubject').textContent = subject;
   $('#previewBody').textContent = body;
 }
@@ -312,10 +405,14 @@ function buildEmailContent(customer) {
   // Subject from domain
   const subject = title || '【GITS 株式会社】アプリ・システム開発で貴社の DX 推進を支援いたします';
 
-  // Build case study text with など at end
+  // Build case study text with など at end - luôn đủ 4 CS
   let caseStudyText = '';
   if (caseStudies.length > 0) {
-    caseStudyText = caseStudies.map(cs => `・${cs}`).join('\n') + ' など';
+    // Loại bỏ dấu ・ ở đầu nếu đã có sẵn trong data
+    caseStudyText = caseStudies.map(cs => {
+      const cleanCS = cs.replace(/^[・･●▪▸►•\-\*]\s*/, '').trim();
+      return `・${cleanCS}`;
+    }).join('\n') + ' など';
   }
 
   // Replace placeholders
@@ -327,23 +424,15 @@ function buildEmailContent(customer) {
 
   // Support individual CaseStudy placeholders: {{CaseStudy_1}}, {{CaseStudy_2}}, etc.
   for (let i = 0; i < 10; i++) {
-    const placeholder = `{{CaseStudy_${i + 1}}}`;
     const cs = caseStudies[i] || '';
-    body = body.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), cs);
-  }
-
-  // Also support {{READ_Casestudy_X}} format
-  for (let i = 0; i < 10; i++) {
-    const placeholder1 = `{{READ_Casestudy_${i + 1}}}`;
-    const placeholder2 = `{{READ_CaseStudy_${i + 1}}}`;
-    const cs = caseStudies[i] || '';
-    body = body.replace(new RegExp(placeholder1.replace(/[{}]/g, '\\$&'), 'gi'), cs);
-    body = body.replace(new RegExp(placeholder2.replace(/[{}]/g, '\\$&'), 'gi'), cs);
+    body = body.replace(new RegExp(`\\{\\{CaseStudy_${i + 1}\\}\\}`, 'g'), cs);
+    body = body.replace(new RegExp(`\\{\\{READ_Casestudy_${i + 1}\\}\\}`, 'gi'), cs);
+    body = body.replace(new RegExp(`\\{\\{READ_CaseStudy_${i + 1}\\}\\}`, 'gi'), cs);
   }
 
   body = `${header}\n\n${body}`;
 
-  return { subject, body };
+  return { subject, body, caseStudies }; // Return caseStudies for debugging
 }
 
 function buildCaseStudyList(customerDomains) {
@@ -365,7 +454,12 @@ function buildCaseStudyList(customerDomains) {
     const mapping = domainMaster[domains[0]];
     if (mapping && mapping.CaseStudies && mapping.CaseStudies.length > 0) {
       const allCS = [...mapping.CaseStudies];
-      caseStudies = shuffleArray(allCS).slice(0, TARGET_CS);
+      const shuffled = shuffleArray(allCS);
+      // Nếu không đủ 4, lặp lại để đủ
+      while (shuffled.length < TARGET_CS && allCS.length > 0) {
+        shuffled.push(...shuffleArray([...allCS]));
+      }
+      caseStudies = shuffled.slice(0, TARGET_CS);
     }
   } else {
     // 2+ Domains: Mỗi domain ít nhất 1 CS, bổ sung để đủ 4
@@ -380,15 +474,15 @@ function buildCaseStudyList(customerDomains) {
         const shuffled = shuffleArray(domainCS);
         
         // Lấy 1 CS đầu tiên cho domain này
-        if (shuffled.length > 0) {
+        if (shuffled.length > 0 && caseStudies.length < TARGET_CS) {
           caseStudies.push(shuffled[0]);
           usedCS.add(shuffled[0]);
         }
         
         // Thêm các CS còn lại vào pool
-        shuffled.slice(1).forEach(cs => {
+        shuffled.forEach(cs => {
           if (!usedCS.has(cs)) {
-            allAvailableCS.push({ cs, domain: d });
+            allAvailableCS.push(cs);
           }
         });
       }
@@ -397,16 +491,26 @@ function buildCaseStudyList(customerDomains) {
     // Bước 2: Bổ sung random từ pool để đủ 4 CS
     if (caseStudies.length < TARGET_CS && allAvailableCS.length > 0) {
       const shuffledPool = shuffleArray(allAvailableCS);
-      for (const item of shuffledPool) {
+      for (const cs of shuffledPool) {
         if (caseStudies.length >= TARGET_CS) break;
-        if (!usedCS.has(item.cs)) {
-          caseStudies.push(item.cs);
-          usedCS.add(item.cs);
+        if (!usedCS.has(cs)) {
+          caseStudies.push(cs);
+          usedCS.add(cs);
         }
+      }
+    }
+
+    // Bước 3: Nếu vẫn chưa đủ 4, lặp lại từ pool
+    if (caseStudies.length < TARGET_CS && allAvailableCS.length > 0) {
+      let idx = 0;
+      while (caseStudies.length < TARGET_CS) {
+        caseStudies.push(allAvailableCS[idx % allAvailableCS.length]);
+        idx++;
       }
     }
   }
 
+  console.log(`📋 Built ${caseStudies.length} CaseStudies for domains [${domains.join(',')}]:`, caseStudies);
   return { caseStudies: caseStudies.slice(0, TARGET_CS), title };
 }
 
@@ -659,6 +763,36 @@ async function clearOldLogs() {
   alert(`Deleted ${sendLogs.length - filtered.length} old logs`);
 }
 
+async function clearAllData() {
+  if (!confirm('Clear ALL saved data? (Customers, Domains, Template, Attachments)')) return;
+  
+  companyInsight = [];
+  domainMaster = {};
+  mailTemplate = '';
+  attachments = [];
+  isDataValidated = false;
+  
+  await chrome.storage.local.remove([
+    'savedCompanyInsight', 
+    'savedDomainMaster', 
+    'savedMailTemplate', 
+    'savedAttachments',
+    'savedIsValidated',
+    'jobQueue'
+  ]);
+  
+  // Reset UI
+  $('#bodyTemplate').value = DEFAULT_TEMPLATE;
+  renderCompanyPreview();
+  renderDomainPreview();
+  renderAttachments();
+  $('label[for="fileCustomer"]').textContent = '📊 Chọn file Company Insight';
+  $('label[for="fileDomain"]').textContent = '📊 Chọn file Domain Master';
+  $('label[for="fileTemplate"]').textContent = '📄 Chọn file Template (Word/TXT)';
+  
+  showStatus('#validateStatus', '✅ All data cleared', 'ok');
+}
+
 
 // ========== ATTACHMENTS ==========
 async function handleAttachments(e) {
@@ -686,6 +820,7 @@ async function handleAttachments(e) {
     renderAttachments();
     label.textContent = `✅ ${attachments.length} files`;
     e.target.value = '';
+    await saveDataToStorage();
   } catch (err) {
     label.textContent = '❌ Error';
     alert(err.message);
@@ -707,7 +842,11 @@ function renderAttachments() {
   `).join('');
 }
 
-window.removeAttachment = (i) => { attachments.splice(i, 1); renderAttachments(); };
+window.removeAttachment = async (i) => { 
+  attachments.splice(i, 1); 
+  renderAttachments(); 
+  await saveDataToStorage();
+};
 
 // ========== STATS ==========
 async function loadStats() {

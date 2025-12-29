@@ -12,7 +12,7 @@
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: #333; line-height: 1.5;
     }
-    .container { background: white; padding: 20px; }
+    .container { background: white; padding: 20px; position: relative; }
     h1 { 
       font-size: 22px; margin: 0 0 15px; text-align: center;
       background: linear-gradient(135deg, #667eea, #764ba2);
@@ -85,6 +85,7 @@
 <body>
   <div class="container">
     <h1>🚀 GITS Mailer Pro</h1>
+    <button id="btnOpenTab" style="position:absolute; top:20px; left:20px; font-size:12px; padding:6px 12px; cursor:pointer; background:#667eea; color:white; border:none; border-radius:4px;">↗ Mở Tab mới</button>
     
     <!-- Daily Stats -->
     <div class="stats-box">
@@ -314,11 +315,12 @@
       </fieldset>
 
       <fieldset>
-        <legend>📥 Export</legend>
+        <legend>📥 Export & Data</legend>
         <div class="row">
           <button id="btnExportToday" class="btn-success">📥 Export Today</button>
           <button id="btnExportFiltered" class="btn-primary">📥 Export Filtered</button>
-          <button id="btnClearOldLogs" class="btn-warning">🗑️ Clear Old Logs (>7 days)</button>
+          <button id="btnClearOldLogs" class="btn-warning">🗑️ Clear Logs >7d</button>
+          <button id="btnClearAllData" style="background:#e74c3c; color:white; border:none; border-radius:6px;">🗑️ Clear All Data</button>
         </div>
       </fieldset>
     </div>
@@ -326,7 +328,7 @@
   </div>
 
   <script src="lib/xlsx.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="lib/jszip.min.js"></script>
   <script src="popup.js" type="module"></script>
 </body>
 </html>
